@@ -47,13 +47,13 @@
 		room code: <b><%= room_id %><b>
 			<input type="button" onclick="copy_to_clipboard('<%= room_id %>');" value="copy code">
 			<input type="button" onclick="window.location.replace('/');" value="leave room">
-			<input type="button" onclick="init();" value="start compass">
+			<input type="button" onclick="toggle_compass();" value="toggle compass">
 		<table>
 			<tbody id="player_list">
 				<tr><th>Name</th><th>Direction (°)</th><th>Distance (m)</th></tr>
 			</tbody>
 		</table>
-		<div class="compass">
+		<div class="compass" hidden>
 			<div class="arrow"></div>
 			<div class="compass-circle"></div>
 		</div>	
@@ -151,16 +151,22 @@
 			compass_circle.style.transform = `translate(-50%, -50%) rotate(${-compass}deg)`;
 		}
 
-		function init() {
-			if (navigator.userAgent.match(/(iPod|iPhone|iPad)/) && navigator.userAgent.match(/AppleWebKit/)) {
-				DeviceOrientationEvent.requestPermission().then((response) => {
-					if (response === "granted")
-						window.addEventListener("deviceorientation", compass_handler, true);
-					else
-						alert("has to be allowed!");
-				}).catch(() => alert("not supported"));
-			} else
-				window.addEventListener("deviceorientationabsolute", compass_handler, true);
+		let init = false;
+		const compass_holder = document.querySelector(".compass");
+		function toggle_compass() {
+			if (!init) {
+				if (navigator.userAgent.match(/(iPod|iPhone|iPad)/) && navigator.userAgent.match(/AppleWebKit/)) {
+					DeviceOrientationEvent.requestPermission().then((response) => {
+						if (response === "granted")
+							window.addEventListener("deviceorientation", compass_handler, true);
+						else
+							alert("has to be allowed!");
+					}).catch(() => alert("not supported"));
+				} else
+					window.addEventListener("deviceorientationabsolute", compass_handler, true);
+				init_ran = true;
+			}
+			compass_holder.hidden = !compass_holder.hidden;
 		}
 	</script>
 </html>
