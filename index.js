@@ -1,55 +1,62 @@
+const fs = require('fs');
 const express = require('express');
+const https = require('https');
+const socket = require('socket.io');
 const crypto = require('crypto');
-const app = express();
-const port = 80;
 
-let uuid_to_room_id = new Map();
+const port = 443;
+const ssl_options = {
+	key: fs.readFileSync('C:/Certbot/live/ebra.dev/privkey.pem'),
+	cert: fs.readFileSync('C:/Certbot/live/ebra.dev/fullchain.pem'),
+};
+
+const app = express();
+const server = https.createServer(ssl_options, app);
+const io = socket(server);
+
 let room_id_to_room = new Map();
 
-app.set('view engine', 'ejs');
+io.on('connection', socket => {
+	let room_id = ''
 
-//let rooms=[{players:[{name:"",longitude:0,latitude:0}]}];
+	socket.on('join room', data => {
+		room_id = data.room_id;
+		if (!room_id || !room_id_to_room.has(room_id))
+			return;
+		socket.join(room_id);
+		room_id_to_room.get(room_id).players[socket.id] = {
+			name: data.user_name,
+			longitude: data.longitude,
+			latitude: data.latitude
+		};
+		io.to(room_id).emit('join acknowledgement', { user: data.user_name, socket: socket.id });
+	});
 
-function leave_user(user_id) {
-	const existing_room_id = uuid_to_room_id.get(user_id);
-	let existing_room = room_id_to_room.get(existing_room_id);
-	delete existing_room.players[user_id];
-	room_id_to_room.set(existing_room_id, existing_room);
-	uuid_to_room_id.delete(user_id);
-}
+	socket.on('position update', data => {
+		if (!room_id || !room_id_to_room.has(room_id))
+			return;
+		let room = room_id_to_room.get(room_id);
+		room.players[socket.id].longitude = data.longitude;
+		room.players[socket.id].latitude = data.latitude;
+		room_id_to_room.set(room_id, room);
+		socket.to(room_id).emit('position update', { players: room.players });
+	});
 
-app.get('/leave-room/:user_id', (req, res) => {
-	const user_id = req.params['user_id'];
-	leave_user(user_id);
-	res.render('left-room');
-});
-
-app.get('/actually-join-room/:room_id/:user_id/:name', (req, res) => {
-	const room_id = req.params['room_id'];
-	const user_id = req.params['user_id'];
-	const user_name = req.params['name'];
-	if (uuid_to_room_id.has(user_id))
-		leave_user(user_id);
-	let room = room_id_to_room.get(room_id);
-	room.players[user_id] = {
-		name: user_name,
-		longitude: 0,
-		latitude: 0
-	};
-	room_id_to_room.set(room_id, room);
-	uuid_to_room_id.set(user_id, room_id);
-	res.render('room', {
-		user_id: user_id
+	socket.on('disconnect', () => {
+		if (!room_id || !room_id_to_room.has(room_id))
+			return;
+		let existing_room = room_id_to_room.get(room_id);
+		delete existing_room.players[socket.id];
+		room_id_to_room.set(room_id, existing_room);
+		io.to(room_id).emit('position update', { players: existing_room.players });
 	});
 });
 
 app.get('/join-room/:room_id', (req, res) => {
 	const room_id = req.params['room_id'];
 	if (room_id_to_room.has(room_id)) {
-		const room = room_id_to_room.get(room_id);
-		res.render('join-room', {
+		res.render('room', {
 			room_id: room_id,
-			room_players: room.players
 		});
 	} else
 		res.render('invalid-room');
@@ -58,14 +65,16 @@ app.get('/join-room/:room_id', (req, res) => {
 app.get('/create-room', (req, res) => {
 	let room_id;
 	do
-		room_id = crypto.randomBytes(10).toString('hex');
+		room_id = "room-" + crypto.randomBytes(10).toString('hex');
 	while (room_id_to_room.has(room_id));
 	let room = {
 		players: {}
 	};
 	room_id_to_room.set(room_id, room);
 	res.redirect('/join-room/' + room_id);
+
 });
 
+app.set('view engine', 'ejs');
 app.use(express.static('public'));
-app.listen(port);
+server.listen(port);

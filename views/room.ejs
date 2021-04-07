@@ -1,8 +1,27 @@
-<p>joined room</p>
-<script>
-function redirect() {
-	location.href = '/leave-room/' + '<%= user_id %>';
-}
-</script>
-<button onclick='redirect()'>leave</button>
-<bold>ss</bold>
+<html>
+	<pre id="json"></pre>
+
+	<script src="/socket.io/socket.io.js"></script>
+	<script>
+		var socket = io();
+		let name = prompt("whats your name");
+		let socket_id = "";
+		socket.emit("join room", { room_id: '<%= room_id %>', user_name: name, longitude: 0, latitude: 0 });
+
+		function update_display(data) {
+			delete data.players[socket_id];
+			document.getElementById("json").innerHTML = JSON.stringify(data.players, undefined, 2);
+		}
+
+		function send_to_server(data) {
+			socket.emit("position update", { longitude: data.coords.longitude, latitude: data.coords.latitude });
+		}
+
+		socket.on("join acknowledgement", (data) => {
+			if (data.user === name)
+				socket_id = data.socket;
+			socket.on("position update", update_display);
+			navigator.geolocation.watchPosition(send_to_server, () => { return; }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+		});
+	</script>
+</html>
