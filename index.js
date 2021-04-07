@@ -6,8 +6,8 @@ const crypto = require('crypto');
 
 const port = 443;
 const ssl_options = {
-	key: fs.readFileSync('C:/Certbot/live/ebra.dev/privkey.pem'),
-	cert: fs.readFileSync('C:/Certbot/live/ebra.dev/fullchain.pem'),
+	key: fs.readFileSync('ssl/privkey.pem'),
+	cert: fs.readFileSync('ssl/fullchain.pem'),
 };
 
 const app = express();
