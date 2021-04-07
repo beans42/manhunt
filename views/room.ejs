@@ -1,52 +1,122 @@
 <html>
+	<head>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	</head>
+
 	<style>
-		table, th, td {
+		table,td,th {
 			padding: 3px;
-			border: 1px solid black;
+			border: 1px solid #000;
 			border-collapse: collapse
+		}
+
+		.compass {
+			position: relative;
+			width: 80vmin;
+			height: 80vmin;
+			margin: 10%
+		}
+
+		.compass>.arrow {
+			position: absolute;
+			width: 0;
+			height: 0;
+			top: -20px;
+			left: 50%;
+			transform: translateX(-50%);
+			border-style: solid;
+			border-width: 30px 20px 0;
+			border-color: red transparent transparent;
+			z-index: 1
+		}
+
+		.compass>.compass-circle {
+			position: absolute;
+			width: 100%;
+			height: 100%;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%,-50%);
+			transition: transform .1s ease-out;
+			background: url(/compass.png) center no-repeat;
+			background-size: contain
 		}
 	</style>
 
-	<table>
-		<tbody id="player_list"></tbody>
-	</table>
+	<body>
+		room code: <%= room_id %>
+		<input type="button" onclick="window.location.replace('/');" value="leave room">
+		<input type="button" onclick="init();" value="start compass">
+		<table>
+			<tbody id="player_list">
+				<tr><th>Name</th><th>Direction (°)</th><th>Distance (m)</th></tr>
+			</tbody>
+		</table>
+		<div class="compass">
+			<div class="arrow"></div>
+			<div class="compass-circle"></div>
+		</div>	
+	</body>
 
 	<script src="/socket.io/socket.io.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/@turf/turf@5/turf.min.js"></script>
 	<script>
 		var socket = io();
-		let name = prompt("Enter a name: ");
+		let user_name = prompt("Enter a name: ");
 		let socket_id = "";
-		socket.emit("join room", { room_id: '<%= room_id %>', user_name: name, longitude: 0, latitude: 0 });
+		socket.emit("join room", { room_id: '<%= room_id %>', user_name, longitude: 0, latitude: 0 });
 
 		function update_display(data) {
+			const local_player = data.players[socket_id];
 			delete data.players[socket_id];
 			let table = document.getElementById("player_list");
-			table.innerHTML = "<tr><th>Name</th><th>Longitude</th><th>Latitude</th></tr>";
+			table.innerHTML = "<tr><th>Name</th><th>Direction (°)</th><th>Distance (m)</th></tr>";
 			for (const entry in data.players) {
 				player = data.players[entry];
+				const local = turf.point([local_player.longitude, local_player.latitude]);
+				const other = turf.point([player.longitude, player.latitude]);
 				let new_row = document.createElement("tr");
 				table.appendChild(new_row);
 				let cell1 = document.createElement("td");
 				cell1.textContent = player.name;
 				new_row.appendChild(cell1);
 				let cell2 = document.createElement("td");
-				cell2.textContent = player.longitude;
+				cell2.textContent = '' + turf.bearing(local, other, { final: true }).toFixed();
 				new_row.appendChild(cell2);
 				let cell3 = document.createElement("td");
-				cell3.textContent = player.latitude;
+				cell3.textContent = '' + (turf.distance(local, other) * 1000).toFixed(2);
 				new_row.appendChild(cell3);
 			}
 		}
 
-		function send_to_server(data) {
-			socket.emit("position update", { longitude: data.coords.longitude, latitude: data.coords.latitude });
+		socket.on("join acknowledgement", (data) => {
+			if (data.user_name === user_name) {
+				socket_id = data.socket;
+				socket.on("position update", update_display);
+				navigator.geolocation.watchPosition(
+					({ coords }) => socket.emit("position update", { longitude: coords.longitude, latitude: coords.latitude }),
+					() => { },
+					{ enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+				);
+			}
+		});
+
+		const compass_circle = document.querySelector(".compass-circle");
+		function compass_handler(e) {
+			let compass = e.webkitCompassHeading || Math.abs(e.alpha - 360);
+			compass_circle.style.transform = `translate(-50%, -50%) rotate(${-compass}deg)`;
 		}
 
-		socket.on("join acknowledgement", (data) => {
-			if (data.user === name)
-				socket_id = data.socket;
-			socket.on("position update", update_display);
-			navigator.geolocation.watchPosition(send_to_server, () => { return; }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
-		});
+		function init() {
+			if (navigator.userAgent.match(/(iPod|iPhone|iPad)/) && navigator.userAgent.match(/AppleWebKit/)) {
+				DeviceOrientationEvent.requestPermission().then((response) => {
+					if (response === "granted")
+						window.addEventListener("deviceorientation", compass_handler, true);
+					else
+						alert("has to be allowed!");
+				}).catch(() => alert("not supported"));
+			} else
+				window.addEventListener("deviceorientationabsolute", compass_handler, true);
+		}
 	</script>
 </html>
