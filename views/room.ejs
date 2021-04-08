@@ -121,23 +121,34 @@
 			table.innerHTML = "<tr><th>Name</th><th>Direction (°)</th><th>Distance (m)</th><th>Track?</th></tr>";
 			for (const entry in data.players) {
 				player = data.players[entry];
+				
 				let new_row = document.createElement("tr");
 				table.appendChild(new_row);
+				
 				let cell1 = document.createElement("td");
 				cell1.textContent = player.name;
 				new_row.appendChild(cell1);
+				
 				let cell2 = document.createElement("td");
 				let current_angle = bearing(player, local_player).toFixed();
 				cell2.textContent = '' + current_angle;
 				new_row.appendChild(cell2);
+				
 				let cell3 = document.createElement("td");
 				cell3.textContent = '' + distance(local_player, player).toFixed(2);
 				new_row.appendChild(cell3);
+				
+				let cell4 = document.createElement("td");
 				let track_button = document.createElement("button");
 				track_button.type = "button";
 				track_button.innerHTML = "track";
-				track_button.onclick = function() { tracked_angle = current_angle; tracked_player_id = entry; };
-				new_row.appendChild(track_button);
+				track_button.onclick = () => {
+					tracked_angle = current_angle;
+					tracked_player_id = entry;
+					compass_needle.style.transform = `rotate(${-(compass_rotation - tracked_angle)}deg)`;
+				};
+				cell4.appendChild(track_button);
+				new_row.appendChild(cell4);
 			}
 			if (tracked_player_id)
 				tracked_angle = bearing(data.players[tracked_player_id], local_player).toFixed();
