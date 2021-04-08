@@ -50,8 +50,8 @@
 		</table>
 		<div id="holder" class="compass" hidden>
 			<div class="arrow"></div>
-			<img id="spinny" src="/compass.png"/>
-			<img id="needle" src="/needle.png" style="z-index: 10; position: relative; top: -100%"/>
+			<img id="spinny" src="/img/compass.png"/>
+			<img id="needle" src="/img/needle.png" style="z-index: 2; position: relative; top: -100%"/>
 		</div>	
 	</body>
 
@@ -61,36 +61,11 @@
 		let user_name = prompt("Enter a name: ");
 		let socket_id = "";
 		let tracked_angle = 0;
-		let tracked_player_id = "";
 		let compass_rotation;
 		let compass_holder = document.getElementById("holder");
 		let compass_circle = document.getElementById("spinny");
 		let compass_needle = document.getElementById("needle");
 		socket.emit("join room", { room_id: '<%= room_id %>', user_name, longitude: 0, latitude: 0 });
-
-		function copy_to_clipboard(text) {
-			if (!navigator.clipboard) {
-				var textArea = document.createElement("textarea");
-				textArea.value = text;
-				textArea.style.top = "0";
-				textArea.style.left = "0";
-				textArea.style.position = "fixed";
-				document.body.appendChild(textArea);
-				textArea.focus();
-				textArea.select();
-				try {
-					var successful = document.execCommand('copy');
-				} catch (err) { }
-				document.body.removeChild(textArea);
-				return;
-			}
-			navigator.clipboard.writeText(text);
-		}
-
-		function radiansToDegrees(radians) {
-			const degrees = radians % (2 * Math.PI);
-			return (degrees * 180) / Math.PI;
-		}
 
 		const deg2rad = Math.PI / 180;
 
@@ -104,16 +79,21 @@
 		}
 
 		function bearing(start, dest) {
+			function rad2deg(radians) {
+				const degrees = radians % (2 * Math.PI);
+				return (degrees * 180) / Math.PI;
+			}
 			const lon1 = start.longitude * deg2rad;
 			const lon2 = dest.longitude * deg2rad;
 			const lat1 = start.latitude * deg2rad;
 			const lat2 = dest.latitude * deg2rad;
 			const a = Math.sin(lon2 - lon1) * Math.cos(lat2);
 			const b = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
-			const c = radiansToDegrees(Math.atan2(a, b));
+			const c = rad2deg(Math.atan2(a, b));
 			return (c + 180) % 360;
 		}
 
+		let tracked_player_id;
 		function update_display(data) {
 			const local_player = data.players[socket_id];
 			delete data.players[socket_id];
@@ -197,6 +177,25 @@
 				init_ran = true;
 			}
 			compass_holder.hidden = !compass_holder.hidden;
+		}
+
+		function copy_to_clipboard(text) {
+			if (!navigator.clipboard) {
+				let text_area = document.createElement("textarea");
+				text_area.value = text;
+				text_area.style.top = "0";
+				text_area.style.left = "0";
+				text_area.style.position = "fixed";
+				document.body.appendChild(text_area);
+				text_area.focus();
+				text_area.select();
+				try {
+					document.execCommand('copy');
+				} catch (err) { }
+				document.body.removeChild(text_area);
+				return;
+			}
+			navigator.clipboard.writeText(text);
 		}
 	</script>
 </html>
