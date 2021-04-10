@@ -1,45 +1,46 @@
+<!DOCTYPE html>
 <html>
 	<head>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		
+		<style>
+			table,td,th {
+				padding: 3px;
+				border: 1px solid #000;
+				margin-top: 3px;
+				border-collapse: collapse
+			}
+			
+			.compass {
+				position: relative;
+				width: 80vmin;
+				height: 80vmin;
+				margin: 10%;
+			}
+			
+			.compass>.arrow {
+				position: absolute;
+				width: 0;
+				height: 0;
+				top: -20px;
+				left: 50%;
+				transform: translateX(-50%);
+				border-style: solid;
+				border-width: 30px 20px 0;
+				border-color: red transparent transparent;
+				z-index: 1
+			}
+			
+			.compass>img {
+				width: 100%;
+				height: 100%;
+				transition: transform .1s ease-out;
+			}
+		</style>
 	</head>
 
-	<style>
-		table,td,th {
-			padding: 3px;
-			border: 1px solid #000;
-			margin-top: 3px;
-			border-collapse: collapse
-		}
-		
-		.compass {
-			position: relative;
-			width: 80vmin;
-			height: 80vmin;
-			margin: 10%;
-		}
-		
-		.compass>.arrow {
-			position: absolute;
-			width: 0;
-			height: 0;
-			top: -20px;
-			left: 50%;
-			transform: translateX(-50%);
-			border-style: solid;
-			border-width: 30px 20px 0;
-			border-color: red transparent transparent;
-			z-index: 1
-		}
-		
-		.compass>img {
-			width: 100%;
-			height: 100%;
-			transition: transform .1s ease-out;
-		}
-	</style>
-
 	<body>
-		room code: <b><%= room_id %><b>
+		room code: <b><%= room_id %></b>
 		<input type="button" onclick="copy_to_clipboard('<%= room_id %>');" value="copy code">
 		<input type="button" onclick="window.location.replace('/');" value="leave room">
 		<input type="button" onclick="toggle_compass();" value="toggle compass">
@@ -52,150 +53,150 @@
 			<div class="arrow"></div>
 			<img id="spinny" src="/img/compass.png"/>
 			<img id="needle" src="/img/needle.png" style="z-index: 2; position: relative; top: -100%"/>
-		</div>	
+		</div>
+		
+		<script src="/socket.io/socket.io.js"></script>
+		<script>
+			var socket = io();
+			let user_name = prompt("Enter a name: ");
+			let socket_id = "";
+			let tracked_angle = 0;
+			let compass_rotation;
+			let compass_holder = document.getElementById("holder");
+			let compass_circle = document.getElementById("spinny");
+			let compass_needle = document.getElementById("needle");
+			socket.emit("join room", { room_id: '<%= room_id %>', user_name, longitude: 0, latitude: 0 });
+	
+			const deg2rad = Math.PI / 180;
+	
+			function distance(start, dest) { //meters
+				const dLat = (dest.latitude - start.latitude) * deg2rad;
+				const dLon = (dest.longitude - start.longitude) * deg2rad;
+				const lat1 = start.latitude * deg2rad;
+				const lat2 = dest.latitude * deg2rad;
+				const a = Math.pow(Math.sin(dLat / 2), 2) + Math.pow(Math.sin(dLon / 2), 2) * Math.cos(lat1) * Math.cos(lat2);
+				return (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))) * 6371008.8;
+			}
+	
+			function bearing(start, dest) {
+				function rad2deg(radians) {
+					const degrees = radians % (2 * Math.PI);
+					return (degrees * 180) / Math.PI;
+				}
+				const lon1 = start.longitude * deg2rad;
+				const lon2 = dest.longitude * deg2rad;
+				const lat1 = start.latitude * deg2rad;
+				const lat2 = dest.latitude * deg2rad;
+				const a = Math.sin(lon2 - lon1) * Math.cos(lat2);
+				const b = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+				const c = rad2deg(Math.atan2(a, b));
+				return (c + 180) % 360;
+			}
+	
+			let tracked_player_id;
+			function update_display(data) {
+				const local_player = data.players[socket_id];
+				delete data.players[socket_id];
+				let table = document.getElementById("player_list");
+				table.innerHTML = "<tr><th>Name</th><th>Direction (°)</th><th>Distance (m)</th><th>Track?</th></tr>";
+				for (const entry in data.players) {
+					player = data.players[entry];
+					
+					let new_row = document.createElement("tr");
+					table.appendChild(new_row);
+					
+					let cell1 = document.createElement("td");
+					cell1.textContent = player.name;
+					new_row.appendChild(cell1);
+					
+					let cell2 = document.createElement("td");
+					let current_angle = bearing(player, local_player).toFixed();
+					cell2.textContent = '' + current_angle;
+					new_row.appendChild(cell2);
+					
+					let cell3 = document.createElement("td");
+					cell3.textContent = '' + distance(local_player, player).toFixed(2);
+					new_row.appendChild(cell3);
+					
+					let cell4 = document.createElement("td");
+					let track_button = document.createElement("button");
+					track_button.type = "button";
+					track_button.innerHTML = "track";
+					track_button.onclick = () => {
+						tracked_angle = current_angle;
+						tracked_player_id = entry;
+						compass_needle.style.transform = `rotate(${-(compass_rotation - tracked_angle)}deg)`;
+					};
+					cell4.appendChild(track_button);
+					new_row.appendChild(cell4);
+				}
+				if (tracked_player_id)
+					tracked_angle = bearing(data.players[tracked_player_id], local_player).toFixed();
+				compass_needle.style.transform = `rotate(${-(compass_rotation - tracked_angle)}deg)`;
+			}
+	
+			socket.on("join acknowledgement", (data) => {
+				if (data.user_name === user_name) {
+					socket_id = data.socket;
+					socket.on("position update", update_display);
+					navigator.geolocation.watchPosition(
+						({ coords }) => socket.emit("position update", { longitude: coords.longitude, latitude: coords.latitude }),
+						() => { },
+						{ enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+					);
+				}
+			});
+	
+			function compass_handler(e) {
+				let compass = e.webkitCompassHeading || Math.abs(e.alpha - 360);
+				compass_rotation = compass_rotation || 0;
+				let aR = compass_rotation % 360;
+				if (aR < 0)
+					aR += 360;
+				if (aR < 180 && compass > aR + 180)
+					compass_rotation -= 360;
+				if (aR >= 180 && compass <= aR - 180)
+					compass_rotation += 360;
+				compass_rotation += (compass - aR);
+				compass_circle.style.transform = `rotate(${-compass_rotation}deg)`;
+				compass_needle.style.transform = `rotate(${-(compass_rotation - tracked_angle)}deg)`;
+			}
+	
+			let init = false;
+			function toggle_compass() {
+				if (!init) { //if first time, initialize compass
+					if (navigator.userAgent.match(/(iPod|iPhone|iPad)/) && navigator.userAgent.match(/AppleWebKit/)) {
+						DeviceOrientationEvent.requestPermission().then((response) => {
+							if (response === "granted")
+								window.addEventListener("deviceorientation", compass_handler, true);
+							else
+								alert("has to be allowed!");
+						}).catch(() => alert("not supported"));
+					} else
+						window.addEventListener("deviceorientationabsolute", compass_handler, true);
+					init_ran = true;
+				}
+				compass_holder.hidden = !compass_holder.hidden;
+			}
+	
+			function copy_to_clipboard(text) {
+				if (!navigator.clipboard) {
+					let text_area = document.createElement("textarea");
+					text_area.value = text;
+					text_area.style.top = "0";
+					text_area.style.left = "0";
+					text_area.style.position = "fixed";
+					document.body.appendChild(text_area);
+					text_area.focus();
+					text_area.select();
+					try {
+						document.execCommand('copy');
+					} catch (err) { }
+					document.body.removeChild(text_area);
+					return;
+				}
+				navigator.clipboard.writeText(text);
+			}
+		</script>
 	</body>
-
-	<script src="/socket.io/socket.io.js"></script>
-	<script>
-		var socket = io();
-		let user_name = prompt("Enter a name: ");
-		let socket_id = "";
-		let tracked_angle = 0;
-		let compass_rotation;
-		let compass_holder = document.getElementById("holder");
-		let compass_circle = document.getElementById("spinny");
-		let compass_needle = document.getElementById("needle");
-		socket.emit("join room", { room_id: '<%= room_id %>', user_name, longitude: 0, latitude: 0 });
-
-		const deg2rad = Math.PI / 180;
-
-		function distance(start, dest) { //meters
-			const dLat = (dest.latitude - start.latitude) * deg2rad;
-			const dLon = (dest.longitude - start.longitude) * deg2rad;
-			const lat1 = start.latitude * deg2rad;
-			const lat2 = dest.latitude * deg2rad;
-			const a = Math.pow(Math.sin(dLat / 2), 2) + Math.pow(Math.sin(dLon / 2), 2) * Math.cos(lat1) * Math.cos(lat2);
-			return (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))) * 6371008.8;
-		}
-
-		function bearing(start, dest) {
-			function rad2deg(radians) {
-				const degrees = radians % (2 * Math.PI);
-				return (degrees * 180) / Math.PI;
-			}
-			const lon1 = start.longitude * deg2rad;
-			const lon2 = dest.longitude * deg2rad;
-			const lat1 = start.latitude * deg2rad;
-			const lat2 = dest.latitude * deg2rad;
-			const a = Math.sin(lon2 - lon1) * Math.cos(lat2);
-			const b = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
-			const c = rad2deg(Math.atan2(a, b));
-			return (c + 180) % 360;
-		}
-
-		let tracked_player_id;
-		function update_display(data) {
-			const local_player = data.players[socket_id];
-			delete data.players[socket_id];
-			let table = document.getElementById("player_list");
-			table.innerHTML = "<tr><th>Name</th><th>Direction (°)</th><th>Distance (m)</th><th>Track?</th></tr>";
-			for (const entry in data.players) {
-				player = data.players[entry];
-				
-				let new_row = document.createElement("tr");
-				table.appendChild(new_row);
-				
-				let cell1 = document.createElement("td");
-				cell1.textContent = player.name;
-				new_row.appendChild(cell1);
-				
-				let cell2 = document.createElement("td");
-				let current_angle = bearing(player, local_player).toFixed();
-				cell2.textContent = '' + current_angle;
-				new_row.appendChild(cell2);
-				
-				let cell3 = document.createElement("td");
-				cell3.textContent = '' + distance(local_player, player).toFixed(2);
-				new_row.appendChild(cell3);
-				
-				let cell4 = document.createElement("td");
-				let track_button = document.createElement("button");
-				track_button.type = "button";
-				track_button.innerHTML = "track";
-				track_button.onclick = () => {
-					tracked_angle = current_angle;
-					tracked_player_id = entry;
-					compass_needle.style.transform = `rotate(${-(compass_rotation - tracked_angle)}deg)`;
-				};
-				cell4.appendChild(track_button);
-				new_row.appendChild(cell4);
-			}
-			if (tracked_player_id)
-				tracked_angle = bearing(data.players[tracked_player_id], local_player).toFixed();
-			compass_needle.style.transform = `rotate(${-(compass_rotation - tracked_angle)}deg)`;
-		}
-
-		socket.on("join acknowledgement", (data) => {
-			if (data.user_name === user_name) {
-				socket_id = data.socket;
-				socket.on("position update", update_display);
-				navigator.geolocation.watchPosition(
-					({ coords }) => socket.emit("position update", { longitude: coords.longitude, latitude: coords.latitude }),
-					() => { },
-					{ enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-				);
-			}
-		});
-
-		function compass_handler(e) {
-			let compass = e.webkitCompassHeading || Math.abs(e.alpha - 360);
-			compass_rotation = compass_rotation || 0;
-			let aR = compass_rotation % 360;
-			if (aR < 0)
-				aR += 360;
-			if (aR < 180 && compass > aR + 180)
-				compass_rotation -= 360;
-			if (aR >= 180 && compass <= aR - 180)
-				compass_rotation += 360;
-			compass_rotation += (compass - aR);
-			compass_circle.style.transform = `rotate(${-compass_rotation}deg)`;
-			compass_needle.style.transform = `rotate(${-(compass_rotation - tracked_angle)}deg)`;
-		}
-
-		let init = false;
-		function toggle_compass() {
-			if (!init) { //if first time, initialize compass
-				if (navigator.userAgent.match(/(iPod|iPhone|iPad)/) && navigator.userAgent.match(/AppleWebKit/)) {
-					DeviceOrientationEvent.requestPermission().then((response) => {
-						if (response === "granted")
-							window.addEventListener("deviceorientation", compass_handler, true);
-						else
-							alert("has to be allowed!");
-					}).catch(() => alert("not supported"));
-				} else
-					window.addEventListener("deviceorientationabsolute", compass_handler, true);
-				init_ran = true;
-			}
-			compass_holder.hidden = !compass_holder.hidden;
-		}
-
-		function copy_to_clipboard(text) {
-			if (!navigator.clipboard) {
-				let text_area = document.createElement("textarea");
-				text_area.value = text;
-				text_area.style.top = "0";
-				text_area.style.left = "0";
-				text_area.style.position = "fixed";
-				document.body.appendChild(text_area);
-				text_area.focus();
-				text_area.select();
-				try {
-					document.execCommand('copy');
-				} catch (err) { }
-				document.body.removeChild(text_area);
-				return;
-			}
-			navigator.clipboard.writeText(text);
-		}
-	</script>
 </html>
