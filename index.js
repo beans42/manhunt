@@ -72,7 +72,7 @@ app.get('/join-room/:room_id', (req, res) => {
 	if (room_id_to_room.has(room_id)) {
 		res.render('room', { room_id });
 	} else
-		res.render('invalid-room');
+		res.redirect('/invalid-room.html');
 });
 
 app.get('/create-room', (req, res) => {

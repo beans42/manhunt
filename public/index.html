@@ -1,13 +1,14 @@
 <!DOCTYPE html>
 <html>
-<head>
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body>
-	<p>manhunt</p>
-	<input type="text" id="room_id" minlength="6" maxlength="6" size="10">
-	<input type="button" onclick="window.location.replace('/join-room/' + document.getElementById('room_id').value);" value="join room">
-	<br>
-	<input type="button" onclick="window.location.replace('/create-room');" value="create room">
-</body>
+	<head>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	</head>
+
+	<body>
+		<p>manhunt</p>
+		<input type="text" id="room_id" minlength="6" maxlength="6" size="10">
+		<input type="button" onclick="window.location.replace('/join-room/' + document.getElementById('room_id').value);" value="join room">
+		<br>
+		<input type="button" onclick="window.location.replace('/create-room');" value="create room">
+	</body>
 </html>
